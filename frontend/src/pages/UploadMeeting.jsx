@@ -19,10 +19,36 @@ function UploadMeeting() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
+  
   const [notes, setNotes] = useState("");
   const [analysisMode, setAnalysisMode] = useState("audio");
   const [fileError, setFileError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const now = new Date();
+  const todayString = `${now.getFullYear()}-${String(now.getMonth() + 1
+  ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  
+  // Handle meeting date 
+  const today = new Date().toISOString().split("T")[0];
+  const [meetingDateError, setMeetingDateError] = useState("");
+  const handleMeetingDateChange = (event) => {
+  const selectedDate = event.target.value;
+
+  if (!selectedDate) {
+    setMeetingDate("");
+    setMeetingDateError("");
+    return;
+  }
+
+  if (selectedDate > todayString) {
+    setMeetingDateError("Meeting date cannot be in the future.");
+    return;
+  }
+
+  setMeetingDate(selectedDate);
+  setMeetingDateError("");
+  };
+  
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
@@ -176,14 +202,24 @@ function UploadMeeting() {
                 </div>
 
                 <div className="form-field">
-                  <label htmlFor="meeting-date">Meeting Date</label>
+                  <label htmlFor="meeting-date">
+                    Meeting Date
+                  </label>
+
                   <input
                     id="meeting-date"
                     name="meetingDate"
                     type="date"
                     value={meetingDate}
-                    onChange={(event) => setMeetingDate(event.target.value)}
+                    max={todayString}
+                    onChange={handleMeetingDateChange}
                   />
+
+                  {meetingDateError && (
+                    <p className="error-message">
+                      {meetingDateError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="form-field form-field--full-width">
