@@ -1,10 +1,9 @@
 import { useRef, useState } from "react";
 import Navbar from "../components/Navbar";
+import { uploadMeeting } from "../services/meetingApi";
 import "./UploadMeeting.css";
 
 const videoFileExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
-
-const API_BASE_URL = "http://127.0.0.1:8000";
 
 function isVideoFile(file) {
   const fileName = file.name.toLowerCase();
@@ -110,45 +109,25 @@ function UploadMeeting() {
 
     const meetingName = meetingTitle.trim() || selectedFile.name;
 
-    // FormData sends the file as multipart/form-data. Do not set a
-    // Content-Type header by hand - the browser adds the boundary that the
-    // server needs to split the parts apart.
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("title", meetingName);
-    formData.append("meetingDate", meetingDate);
-    formData.append("notes", notes);
-    formData.append("analysisMode", analysisMode);
-
     setIsUploading(true);
     showStatus(`Uploading ${meetingName}...`);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/upload`, {
-        method: "POST",
-        body: formData,
+      // meetingApi handles the request details. Anything it throws already has
+      // a message that is safe to show the user.
+      const meeting = await uploadMeeting({
+        file: selectedFile,
+        title: meetingName,
+        meetingDate,
+        notes,
+        analysisMode,
       });
 
-      if (!response.ok) {
-        // fetch only rejects on network failure, so a 4xx or 5xx still lands
-        // here and has to be checked by hand.
-        const errorBody = await response.json().catch(() => null);
-        throw new Error(
-          errorBody?.detail || `Upload failed with status ${response.status}.`,
-        );
-      }
-
-      const result = await response.json();
       showStatus(
-        `${result.meeting.filename} was uploaded successfully. Analysis is not available yet.`,
+        `${meeting.filename} was uploaded successfully. Analysis is not available yet.`,
       );
     } catch (error) {
-      showStatus(
-        error instanceof TypeError
-          ? "Could not reach the server. Check that the backend is running on port 8000."
-          : error.message,
-        true,
-      );
+      showStatus(error.message, true);
     } finally {
       // finally runs whether the upload worked or not, so the button can never
       // get stuck in its loading state.
