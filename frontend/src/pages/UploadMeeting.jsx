@@ -4,6 +4,8 @@ import "./UploadMeeting.css";
 
 const videoFileExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
 
+const API_BASE_URL = "http://127.0.0.1:8000";
+
 function isVideoFile(file) {
   const fileName = file.name.toLowerCase();
 
@@ -24,12 +26,13 @@ function UploadMeeting() {
   const [analysisMode, setAnalysisMode] = useState("audio");
   const [fileError, setFileError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [statusIsError, setStatusIsError] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const now = new Date();
   const todayString = `${now.getFullYear()}-${String(now.getMonth() + 1
   ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   
-  // Handle meeting date 
-  const today = new Date().toISOString().split("T")[0];
+  // Handle meeting date
   const [meetingDateError, setMeetingDateError] = useState("");
   const handleMeetingDateChange = (event) => {
   const selectedDate = event.target.value;
@@ -50,6 +53,11 @@ function UploadMeeting() {
   };
   
 
+  const showStatus = (message, isError = false) => {
+    setStatusMessage(message);
+    setStatusIsError(isError);
+  };
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
 
@@ -62,20 +70,20 @@ function UploadMeeting() {
       setFileError(
         "Please select a valid video file, such as MP4, MOV, AVI, MKV or WebM.",
       );
-      setStatusMessage("");
+      showStatus("");
       event.target.value = "";
       return;
     }
 
     setSelectedFile(file);
     setFileError("");
-    setStatusMessage("");
+    showStatus("");
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setFileError("");
-    setStatusMessage("");
+    showStatus("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -86,7 +94,9 @@ function UploadMeeting() {
     fileInputRef.current?.click();
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
+    // Stop the browser from doing its own form submission, which would reload
+    // the page and throw away everything React is holding in state.
     event.preventDefault();
 
     if (!selectedFile) {
@@ -94,10 +104,56 @@ function UploadMeeting() {
       return;
     }
 
+    if (meetingDateError) {
+      return;
+    }
+
     const meetingName = meetingTitle.trim() || selectedFile.name;
-    setStatusMessage(
-      `${meetingName} is ready for analysis. This demo did not upload or analyse your video.`,
-    );
+
+    // FormData sends the file as multipart/form-data. Do not set a
+    // Content-Type header by hand - the browser adds the boundary that the
+    // server needs to split the parts apart.
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("title", meetingName);
+    formData.append("meetingDate", meetingDate);
+    formData.append("notes", notes);
+    formData.append("analysisMode", analysisMode);
+
+    setIsUploading(true);
+    showStatus(`Uploading ${meetingName}...`);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        // fetch only rejects on network failure, so a 4xx or 5xx still lands
+        // here and has to be checked by hand.
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(
+          errorBody?.detail || `Upload failed with status ${response.status}.`,
+        );
+      }
+
+      const result = await response.json();
+      showStatus(
+        `${result.meeting.filename} was uploaded successfully. Analysis is not available yet.`,
+      );
+    } catch (error) {
+      showStatus(
+        error instanceof TypeError
+          ? "Could not reach the server. Check that the backend is running on port 8000."
+          : error.message,
+        true,
+      );
+    } finally {
+      // finally runs whether the upload worked or not, so the button can never
+      // get stuck in its loading state.
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -324,21 +380,29 @@ function UploadMeeting() {
         </div>
 
         <div className="status-region" role="status" aria-live="polite">
-          {statusMessage && <p className="status-message">{statusMessage}</p>}
+          {statusMessage && (
+            <p
+              className={`status-message${
+                statusIsError ? " status-message--error" : ""
+              }`}
+            >
+              {statusMessage}
+            </p>
+          )}
         </div>
 
         <footer className="form-actions">
           <p>
             {selectedFile
-              ? "Your video is ready for this local demonstration."
+              ? "Your video is ready to upload."
               : "Select a video to enable analysis."}
           </p>
           <button
             className="analyse-button"
             type="submit"
-            disabled={!selectedFile}
+            disabled={!selectedFile || isUploading}
           >
-            Analyse Meeting
+            {isUploading ? "Uploading..." : "Analyse Meeting"}
           </button>
         </footer>
       </form>

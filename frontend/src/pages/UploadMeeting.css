@@ -388,6 +388,12 @@
   font-weight: 600;
 }
 
+.status-message--error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
 .form-actions {
   display: flex;
   align-items: center;

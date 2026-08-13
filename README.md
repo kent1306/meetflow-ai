@@ -11,6 +11,10 @@ The current project uses:
 
 The application is being developed so users can upload meeting videos, process meeting content, and later generate summaries, action items, key decisions, follow-up suggestions, and optional visual analysis.
 
+> **New to the project?** This README covers **setup** — how to install and run everything.
+> For a plain-English explanation of **what the code actually does**, read
+> [docs/CODEBASE.md](docs/CODEBASE.md).
+
 ---
 
 ## 1. Project Structure
