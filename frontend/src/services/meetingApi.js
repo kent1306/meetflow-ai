@@ -14,6 +14,25 @@ const API_BASE_URL =
 const NETWORK_ERROR_MESSAGE =
   "Could not reach the server. Check that the backend is running on port 8000.";
 
+// FastAPI uses a string for expected errors and an array for validation errors.
+function getErrorDetail(errorBody) {
+  const detail = errorBody?.detail;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const validationMessages = detail
+      .map((item) => (typeof item?.msg === "string" ? item.msg : ""))
+      .filter(Boolean);
+
+    return validationMessages.join(" ");
+  }
+
+  return "";
+}
+
 /**
  * Turn a finished response into data, or throw an Error worth displaying.
  *
@@ -22,17 +41,21 @@ const NETWORK_ERROR_MESSAGE =
  * as fetch is concerned, so status has to be checked by hand.
  */
 async function readResponse(response, fallbackMessage) {
+  const responseBody = await response.json().catch(() => null);
+
   if (!response.ok) {
-    // FastAPI puts its error text in a "detail" field. If the body is missing
-    // or is not JSON, fall back to a generic message rather than crashing here.
-    const errorBody = await response.json().catch(() => null);
+    const errorDetail = getErrorDetail(responseBody);
 
     throw new Error(
-      errorBody?.detail || `${fallbackMessage} (status ${response.status})`,
+      errorDetail || `${fallbackMessage} (status ${response.status})`,
     );
   }
 
-  return response.json();
+  if (responseBody === null) {
+    throw new Error(`${fallbackMessage} The server returned an invalid response.`);
+  }
+
+  return responseBody;
 }
 
 /**
@@ -82,12 +105,22 @@ export async function uploadMeeting({
     "Upload failed.",
   );
 
+  if (!result?.meeting || typeof result.meeting.filename !== "string") {
+    throw new Error("Upload failed. The server returned an invalid response.");
+  }
+
   return result.meeting;
 }
 
 /** Fetch every meeting uploaded since the backend last started. */
 export async function getMeetings() {
   const result = await request("/meetings", undefined, "Could not load meetings.");
+
+  if (!Array.isArray(result?.meetings)) {
+    throw new Error(
+      "Could not load meetings. The server returned an invalid response.",
+    );
+  }
 
   return result.meetings;
 }

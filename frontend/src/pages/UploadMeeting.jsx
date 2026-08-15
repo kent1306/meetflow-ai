@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import Navbar from "../components/Navbar";
+import RequestStatus from "../components/RequestStatus";
 import { uploadMeeting } from "../services/meetingApi";
 import "./UploadMeeting.css";
 
 const videoFileExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+const INITIAL_UPLOAD_STATE = { type: "idle", message: "" };
 
 function isVideoFile(file) {
   const fileName = file.name.toLowerCase();
@@ -17,44 +19,45 @@ function isVideoFile(file) {
 
 function UploadMeeting() {
   const fileInputRef = useRef(null);
+  const uploadInProgressRef = useRef(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
-  
   const [notes, setNotes] = useState("");
   const [analysisMode, setAnalysisMode] = useState("audio");
   const [fileError, setFileError] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
-  const [statusIsError, setStatusIsError] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadState, setUploadState] = useState(INITIAL_UPLOAD_STATE);
+  const [meetingDateError, setMeetingDateError] = useState("");
+  const isUploading = uploadState.type === "loading";
   const now = new Date();
   const todayString = `${now.getFullYear()}-${String(now.getMonth() + 1
   ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  
-  // Handle meeting date
-  const [meetingDateError, setMeetingDateError] = useState("");
-  const handleMeetingDateChange = (event) => {
-  const selectedDate = event.target.value;
 
-  if (!selectedDate) {
-    setMeetingDate("");
-    setMeetingDateError("");
-    return;
-  }
-
-  if (selectedDate > todayString) {
-    setMeetingDateError("Meeting date cannot be in the future.");
-    return;
-  }
-
-  setMeetingDate(selectedDate);
-  setMeetingDateError("");
+  const clearUploadStatus = () => {
+    if (!uploadInProgressRef.current) {
+      setUploadState((currentState) =>
+        currentState.type === "idle" ? currentState : INITIAL_UPLOAD_STATE,
+      );
+    }
   };
-  
 
-  const showStatus = (message, isError = false) => {
-    setStatusMessage(message);
-    setStatusIsError(isError);
+  const handleMeetingDateChange = (event) => {
+    const selectedDate = event.target.value;
+    clearUploadStatus();
+
+    if (!selectedDate) {
+      setMeetingDate("");
+      setMeetingDateError("");
+      return;
+    }
+
+    if (selectedDate > todayString) {
+      setMeetingDateError("Meeting date cannot be in the future.");
+      return;
+    }
+
+    setMeetingDate(selectedDate);
+    setMeetingDateError("");
   };
 
   const handleFileChange = (event) => {
@@ -69,20 +72,20 @@ function UploadMeeting() {
       setFileError(
         "Please select a valid video file, such as MP4, MOV, AVI, MKV or WebM.",
       );
-      showStatus("");
+      clearUploadStatus();
       event.target.value = "";
       return;
     }
 
     setSelectedFile(file);
     setFileError("");
-    showStatus("");
+    clearUploadStatus();
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setFileError("");
-    showStatus("");
+    clearUploadStatus();
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -98,6 +101,10 @@ function UploadMeeting() {
     // the page and throw away everything React is holding in state.
     event.preventDefault();
 
+    if (uploadInProgressRef.current) {
+      return;
+    }
+
     if (!selectedFile) {
       setFileError("Please select a video before continuing.");
       return;
@@ -109,8 +116,11 @@ function UploadMeeting() {
 
     const meetingName = meetingTitle.trim() || selectedFile.name;
 
-    setIsUploading(true);
-    showStatus(`Uploading ${meetingName}...`);
+    uploadInProgressRef.current = true;
+    setUploadState({
+      type: "loading",
+      message: `Uploading ${meetingName}...`,
+    });
 
     try {
       // meetingApi handles the request details. Anything it throws already has
@@ -123,17 +133,36 @@ function UploadMeeting() {
         analysisMode,
       });
 
-      showStatus(
-        `${meeting.filename} was uploaded successfully. Analysis is not available yet.`,
-      );
+      setUploadState({
+        type: "success",
+        message: `${meeting.filename} was uploaded successfully. Analysis is not available yet.`,
+      });
+      setSelectedFile(null);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (error) {
-      showStatus(error.message, true);
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Upload failed. Please try again.";
+
+      setUploadState({ type: "error", message: errorMessage });
     } finally {
-      // finally runs whether the upload worked or not, so the button can never
-      // get stuck in its loading state.
-      setIsUploading(false);
+      uploadInProgressRef.current = false;
     }
   };
+
+  let formActionMessage = "Select a video to enable analysis.";
+
+  if (selectedFile) {
+    formActionMessage = "Your video is ready to upload.";
+  }
+
+  if (isUploading) {
+    formActionMessage = "Please wait while your video uploads.";
+  }
 
   return (
     <>
@@ -149,7 +178,7 @@ function UploadMeeting() {
       </header>
 
       <form className="upload-form" onSubmit={handleSubmit}>
-        <div className="upload-layout">
+        <div className="upload-layout" aria-busy={isUploading}>
           <div className="upload-form__sections">
             <section className="form-section" aria-labelledby="upload-heading">
               <div className="section-heading">
@@ -171,6 +200,7 @@ function UploadMeeting() {
                   type="file"
                   accept="video/*"
                   required
+                  disabled={isUploading}
                   aria-describedby={
                     fileError ? "video-help video-error" : "video-help"
                   }
@@ -198,6 +228,7 @@ function UploadMeeting() {
                     <button
                       className="change-file-button"
                       type="button"
+                      disabled={isUploading}
                       onClick={handleChangeFile}
                     >
                       Change
@@ -205,6 +236,7 @@ function UploadMeeting() {
                     <button
                       className="remove-file-button"
                       type="button"
+                      disabled={isUploading}
                       onClick={handleRemoveFile}
                     >
                       Remove
@@ -232,7 +264,11 @@ function UploadMeeting() {
                     value={meetingTitle}
                     placeholder="For example, Weekly Project Check-in"
                     maxLength="100"
-                    onChange={(event) => setMeetingTitle(event.target.value)}
+                    disabled={isUploading}
+                    onChange={(event) => {
+                      setMeetingTitle(event.target.value);
+                      clearUploadStatus();
+                    }}
                   />
                 </div>
 
@@ -247,11 +283,20 @@ function UploadMeeting() {
                     type="date"
                     value={meetingDate}
                     max={todayString}
+                    disabled={isUploading}
+                    aria-describedby={
+                      meetingDateError ? "meeting-date-error" : undefined
+                    }
+                    aria-invalid={Boolean(meetingDateError)}
                     onChange={handleMeetingDateChange}
                   />
 
                   {meetingDateError && (
-                    <p className="error-message">
+                    <p
+                      id="meeting-date-error"
+                      className="validation-message"
+                      role="alert"
+                    >
                       {meetingDateError}
                     </p>
                   )}
@@ -266,7 +311,11 @@ function UploadMeeting() {
                     placeholder="Add an agenda, participant names or any useful context."
                     rows="4"
                     maxLength="500"
-                    onChange={(event) => setNotes(event.target.value)}
+                    disabled={isUploading}
+                    onChange={(event) => {
+                      setNotes(event.target.value);
+                      clearUploadStatus();
+                    }}
                   />
                 </div>
               </div>
@@ -291,7 +340,11 @@ function UploadMeeting() {
                     name="analysisMode"
                     value="audio"
                     checked={analysisMode === "audio"}
-                    onChange={(event) => setAnalysisMode(event.target.value)}
+                    disabled={isUploading}
+                    onChange={(event) => {
+                      setAnalysisMode(event.target.value);
+                      clearUploadStatus();
+                    }}
                   />
                   <span>
                     <strong>Audio Analysis</strong>
@@ -311,7 +364,11 @@ function UploadMeeting() {
                     name="analysisMode"
                     value="audio-visual"
                     checked={analysisMode === "audio-visual"}
-                    onChange={(event) => setAnalysisMode(event.target.value)}
+                    disabled={isUploading}
+                    onChange={(event) => {
+                      setAnalysisMode(event.target.value);
+                      clearUploadStatus();
+                    }}
                   />
                   <span>
                     <strong>Audio + Visual Analysis</strong>
@@ -358,28 +415,16 @@ function UploadMeeting() {
           </aside>
         </div>
 
-        <div className="status-region" role="status" aria-live="polite">
-          {statusMessage && (
-            <p
-              className={`status-message${
-                statusIsError ? " status-message--error" : ""
-              }`}
-            >
-              {statusMessage}
-            </p>
-          )}
-        </div>
+        <RequestStatus type={uploadState.type} message={uploadState.message} />
 
         <footer className="form-actions">
           <p>
-            {selectedFile
-              ? "Your video is ready to upload."
-              : "Select a video to enable analysis."}
+            {formActionMessage}
           </p>
           <button
             className="analyse-button"
             type="submit"
-            disabled={!selectedFile || isUploading}
+            disabled={!selectedFile || isUploading || Boolean(meetingDateError)}
           >
             {isUploading ? "Uploading..." : "Analyse Meeting"}
           </button>

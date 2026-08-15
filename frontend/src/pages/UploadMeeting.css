@@ -143,6 +143,10 @@
   cursor: pointer;
 }
 
+.video-upload input[type="file"]:disabled::file-selector-button {
+  cursor: not-allowed;
+}
+
 .field-help {
   margin: 12px 0 0;
   color: var(--text);
@@ -378,22 +382,6 @@
   line-height: 1.55;
 }
 
-.status-message {
-  margin: 0;
-  padding: 13px 15px;
-  border: 1px solid var(--success-border);
-  border-radius: 10px;
-  color: var(--success);
-  background: var(--success-bg);
-  font-weight: 600;
-}
-
-.status-message--error {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-
 .form-actions {
   display: flex;
   align-items: center;
@@ -432,9 +420,23 @@
   cursor: not-allowed;
 }
 
-.change-file-button:hover,
-.remove-file-button:hover {
+.change-file-button:hover:not(:disabled),
+.remove-file-button:hover:not(:disabled) {
   background: var(--accent-bg);
+}
+
+.change-file-button:disabled,
+.remove-file-button:disabled {
+  color: var(--text-soft);
+  background: var(--disabled-bg);
+  cursor: not-allowed;
+}
+
+.upload-form input:disabled,
+.upload-form textarea:disabled,
+.upload-layout[aria-busy="true"] .analysis-option {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .analyse-button:focus-visible,
